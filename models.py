@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, select, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship, backref
+from datetime import datetime
 
 # SQLAlchemy Setup
 Base = declarative_base()
@@ -14,6 +15,20 @@ class User(Base):
     is_active = Column(Boolean, default=True)
 
     resident = relationship("Resident", back_populates="user", uselist=False)
+    news = relationship("News", back_populates="user")
+
+
+class News(Base):
+    __tablename__ = "news"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    post_title = Column(String)
+    post_info = Column(Text)
+    post_image = Column(Text)
+    post_time = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="news")
 
 
 class Resident(Base):

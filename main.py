@@ -110,11 +110,24 @@ class UserResponse(BaseModel):
     is_active: bool
 
 
+class NewsCreate(BaseModel):
+    user_id: int
+    post_title: str
+    post_info: str
+    post_image: str
+
+
+class NewsUpdate(BaseModel):
+    post_title: str | None = None
+    post_info: str | None = None
+    post_image: str | None = None
+
+
 class ResidentCreate(BaseModel):
     user_id: int
     surname: str
     name: str
-    birthdate: datetime  # Use datetime (Python's datetime)
+    birthdate: datetime
     email: str
     phone: str
 
@@ -173,11 +186,20 @@ class ResidentToTrainingCreate(BaseModel):
     training_session_id: int
 
 
+class NewsInfo(BaseModel):
+    id: int
+    username: str
+    post_title: str
+    post_info: str
+    post_image: str
+    post_time: datetime
+
+
 class ResidentInfo(BaseModel):
     id: int
     surname: str
     name: str
-    birthdate: datetime  # Use datetime (Python's datetime)
+    birthdate: datetime
     email: str
     phone: str
 
@@ -316,6 +338,26 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
     return current_user
 
 
+@app.get("/news/all", response_model=List[NewsInfo], tags=["news endpoints"])
+def get_all_news(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Retrieves information for all news.
+    """
+    news = db.execute(select(News)).scalars().all()
+    news_data = []
+    for new in news:
+        news_data.append(NewsInfo(
+            id=new.id,
+            username=new.user.username,
+            post_title=new.post_title,
+            post_info=new.post_info,
+            post_image=new.post_image,
+            post_time=new.post_time,
+        ))
+
+    return news_data
+
+
 @app.get("/coaches/all", response_model=List[CoachInfo], tags=["resident panel"])
 def get_all_coaches(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
@@ -333,6 +375,15 @@ def create_resident(resident: ResidentCreate, db: Session = Depends(get_db), cur
     db.commit()
     db.refresh(db_resident)
     return db_resident
+
+
+@app.post("/news/", response_model=None, status_code=status.HTTP_201_CREATED, tags=["news endpoints"])
+def create_post(news: NewsCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_news = News(**news.dict())
+    db.add(db_news)
+    db.commit()
+    db.refresh(db_news)
+    return db_news
 
 
 @app.post("/coaches/", response_model=CoachInfo, status_code=status.HTTP_201_CREATED, tags=["admin endpoints"])
@@ -583,6 +634,21 @@ def delete_training_session(training_session_id: int, db: Session = Depends(get_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training session not found")
 
     db.delete(training_session)
+    db.commit()
+    return
+
+
+@app.delete("/news/{post_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["news endpoints"])
+def remove_post(post_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Removes a post from news.
+    """
+    db_post = db.execute(select(News).where(News.id == post_id)).scalars().first()
+
+    if db_post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
+
+    db.delete(db_post)
     db.commit()
     return
 
