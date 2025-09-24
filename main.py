@@ -442,7 +442,7 @@ def read_coach(coach_id: int, db: Session = Depends(get_db), current_user: User 
 @app.get("/training_sessions/", response_model=List[TrainingSessionInfo])
 def read_training_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     training_sessions_data = []
-    training_sessions = db.execute(select(TrainingSession)).scalars().all()
+    training_sessions = db.execute(select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
     for session in training_sessions:
         training_sessions_data.append(
             TrainingSessionInfo(
@@ -468,16 +468,16 @@ def read_training_sessions_with_residents(category_id: int, coach_id: int, db: S
     training_sessions_data = []
     if category_id > 0 and coach_id > 0:
         training_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.training_type_id == category_id, TrainingSession.coach_id == coach_id)).scalars().all()
+            select(TrainingSession).where(TrainingSession.training_type_id == category_id, TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
     elif category_id > 0:
         training_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.training_type_id == category_id)).scalars().all()
+            select(TrainingSession).where(TrainingSession.training_type_id == category_id).order_by(TrainingSession.start_time)).scalars().all()
     elif coach_id > 0:
         training_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.coach_id == coach_id)).scalars().all()
+            select(TrainingSession).where(TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
     else:
         training_sessions = db.execute(
-            select(TrainingSession)).scalars().all()
+            select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
 
     for session in training_sessions:
         residents = db.execute(
@@ -537,10 +537,13 @@ def read_enrolled_training_sessions(db: Session = Depends(get_db), current_user:
     if not resident:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resident not found for this user")
 
-    enrolled_sessions = [
+    enrolled_sessions = sorted([
         ResidentToTraining.training_session
         for ResidentToTraining in resident.trainings
-    ]
+    ],
+        key=lambda item: item.start_time
+    )
+
     return fetch_training_session_data(enrolled_sessions)
 
 
@@ -559,7 +562,7 @@ def read_not_enrolled_training_sessions(db: Session = Depends(get_db), current_u
     }
 
     # Get all training sessions and filter out the enrolled ones
-    all_sessions = db.execute(select(TrainingSession)).scalars().all()
+    all_sessions = db.execute(select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
     not_enrolled_sessions = [
         session for session in all_sessions if session.id not in enrolled_session_ids
     ]
@@ -583,16 +586,16 @@ def read_not_enrolled_training_sessions_by_filter(category_id: int, coach_id: in
     # Get all training sessions and filter out the enrolled ones
     if category_id > 0 and coach_id > 0:
         all_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.training_type_id == category_id, TrainingSession.coach_id == coach_id)).scalars().all()
+            select(TrainingSession).where(TrainingSession.training_type_id == category_id, TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
     elif category_id > 0:
         all_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.training_type_id == category_id)).scalars().all()
+            select(TrainingSession).where(TrainingSession.training_type_id == category_id).order_by(TrainingSession.start_time)).scalars().all()
     elif coach_id > 0:
         all_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.coach_id == coach_id)).scalars().all()
+            select(TrainingSession).where(TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
     else:
         all_sessions = db.execute(
-            select(TrainingSession)).scalars().all()
+            select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
 
     not_enrolled_sessions = [
         session for session in all_sessions if session.id not in enrolled_session_ids
