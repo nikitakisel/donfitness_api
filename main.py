@@ -172,12 +172,25 @@ class TrainingTypeCreate(BaseModel):
     description: str
 
 
+class TrainingTypeUpdate(BaseModel):
+    training_name: str | None = None
+    description: str | None = None
+
+
 class TrainingSessionCreate(BaseModel):
     training_type_id: int
     coach_id: int
-    start_time: datetime  # Use datetime (Python's datetime)
+    start_time: datetime
     duration: int
     max_capacity: int
+
+
+class TrainingSessionUpdate(BaseModel):
+    training_type_id: int | None = None
+    coach_id: int | None = None
+    start_time: datetime | None = None
+    duration: int | None = None
+    max_capacity: int | None = None
 
 
 # Pydantic model for ResidentToTraining
@@ -193,6 +206,13 @@ class NewsInfo(BaseModel):
     post_info: str
     post_image: str
     post_time: datetime
+
+
+class NewsUpdate(BaseModel):
+    post_title: str | None = None
+    post_info: str | None = None
+    post_image: str | None = None
+    post_time: datetime | None = None
 
 
 class ResidentInfo(BaseModel):
@@ -358,7 +378,7 @@ def get_all_news(db: Session = Depends(get_db), current_user: User = Depends(get
     return news_data
 
 
-@app.get("/coaches/all", response_model=List[CoachInfo], tags=["resident panel"])
+@app.get("/coaches/all", response_model=List[CoachInfo], tags=["coaches endpoints"])
 def get_all_coaches(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Retrieves information for all coaches.
@@ -386,7 +406,7 @@ def create_post(news: NewsCreate, db: Session = Depends(get_db), current_user: U
     return db_news
 
 
-@app.post("/coaches/", response_model=CoachInfo, status_code=status.HTTP_201_CREATED, tags=["admin endpoints"])
+@app.post("/coaches/", response_model=CoachInfo, status_code=status.HTTP_201_CREATED, tags=["coaches endpoints"])
 def create_coach(coach: CoachCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_coach = Coach(**coach.dict())
     db.add(db_coach)
@@ -395,7 +415,7 @@ def create_coach(coach: CoachCreate, db: Session = Depends(get_db), current_user
     return db_coach
 
 
-@app.post("/training_types/", response_model=None, status_code=status.HTTP_201_CREATED, tags=["admin endpoints"])
+@app.post("/training_types/", response_model=None, status_code=status.HTTP_201_CREATED, tags=["training types endpoints"])
 def create_training_type(training_type: TrainingTypeCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_training_type = TrainingType(**training_type.dict())
     db.add(db_training_type)
@@ -404,7 +424,7 @@ def create_training_type(training_type: TrainingTypeCreate, db: Session = Depend
     return db_training_type
 
 
-@app.post("/training_sessions/", response_model=None, status_code=status.HTTP_201_CREATED, tags=["admin endpoints"])
+@app.post("/training_sessions/", response_model=None, status_code=status.HTTP_201_CREATED, tags=["training sessions endpoints"])
 def create_training_session(training_session: TrainingSessionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_training_session = TrainingSession(**training_session.dict())
     db.add(db_training_session)
@@ -431,7 +451,7 @@ def read_resident(resident_id: int, db: Session = Depends(get_db), current_user:
     return resident
 
 
-@app.get("/coaches/{coach_id}", response_model=CoachInfo)
+@app.get("/coaches/{coach_id}", response_model=CoachInfo, tags=["coaches endpoints"])
 def read_coach(coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     coach = db.execute(select(Coach).where(Coach.id == coach_id)).scalars().first()
     if coach is None:
@@ -439,7 +459,7 @@ def read_coach(coach_id: int, db: Session = Depends(get_db), current_user: User 
     return coach
 
 
-@app.get("/training_sessions/", response_model=List[TrainingSessionInfo])
+@app.get("/training_sessions/", response_model=List[TrainingSessionInfo], tags=["training sessions endpoints"])
 def read_training_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     training_sessions_data = []
     training_sessions = db.execute(select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
@@ -460,7 +480,7 @@ def read_training_sessions(db: Session = Depends(get_db), current_user: User = D
     return training_sessions_data
 
 
-@app.get("/training_sessions/residents/{category_id}/{coach_id}", response_model=List[TrainingSessionInfoWithResidents], tags=["admin endpoints"])
+@app.get("/training_sessions/residents/{category_id}/{coach_id}", response_model=List[TrainingSessionInfoWithResidents], tags=["training sessions endpoints"])
 def read_training_sessions_with_residents(category_id: int, coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Retrieves all training sessions with a list of residents enrolled in each session.
@@ -512,7 +532,7 @@ def read_training_sessions_with_residents(category_id: int, coach_id: int, db: S
     return training_sessions_data
 
 
-@app.get("/training_types/", response_model=List[TrainingTypeInfo], tags=["resident panel"])
+@app.get("/training_types/", response_model=List[TrainingTypeInfo], tags=["resident panel", "training types endpoints"])
 def read_training_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     training_types_data = []
     training_types = db.execute(select(TrainingType)).scalars().all()
@@ -603,74 +623,6 @@ def read_not_enrolled_training_sessions_by_filter(category_id: int, coach_id: in
     return fetch_training_session_data(not_enrolled_sessions)
 
 
-# DELETE Endpoints (Protected)
-@app.delete("/resident_to_training/{resident_id}/{training_session_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["resident panel", "admin endpoints"])
-def remove_resident_from_training(resident_id: int, training_session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """
-    Removes a resident from a training session.
-    """
-    db_resident_to_training = db.execute(
-        select(ResidentToTraining).where(
-            ResidentToTraining.resident_id == resident_id,
-            ResidentToTraining.training_session_id == training_session_id
-        )
-    ).scalars().first()
-
-    if db_resident_to_training is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resident is not enrolled in this training session")
-
-    db.delete(db_resident_to_training)
-    db.commit()
-    return
-
-
-@app.delete("/training_sessions/{training_session_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["admin endpoints"])
-def delete_training_session(training_session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """
-    Deletes a training session.
-    """
-    training_session = db.execute(
-        select(TrainingSession).where(TrainingSession.id == training_session_id)
-    ).scalars().first()
-
-    if training_session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training session not found")
-
-    db.delete(training_session)
-    db.commit()
-    return
-
-
-@app.delete("/news/{post_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["news endpoints"])
-def remove_post(post_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """
-    Removes a post from news.
-    """
-    db_post = db.execute(select(News).where(News.id == post_id)).scalars().first()
-
-    if db_post is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
-
-    db.delete(db_post)
-    db.commit()
-    return
-
-
-@app.delete("/coaches/{coach_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_coach(coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """
-    Removes a coach.
-    """
-    db_coach = db.execute(select(Coach).where(Coach.id == coach_id)).scalars().first()
-
-    if db_coach is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
-
-    db.delete(db_coach)
-    db.commit()
-    return
-
-
 # PUT Endpoints (Protected)
 @app.put("/residents/{resident_id}", response_model=ResidentInfo, tags=["resident panel"])
 def update_resident(resident_id: int, resident_update: ResidentUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
@@ -698,8 +650,69 @@ def update_resident(resident_id: int, resident_update: ResidentUpdate, db: Sessi
     return db_resident
 
 
-@app.put("/coaches/{coach_id}", response_model=CoachInfo)
-def update_coach(coach_id: int, coach_update: CoachUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+@app.put("/training_sessions/{session_id}", response_model=TrainingSessionInfo, tags=["training sessions endpoints"])
+def update_training_session(
+    session_id: int,
+    session_update: TrainingSessionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Updates a training session's information.
+    """
+    db_session = db.execute(select(TrainingSession).where(TrainingSession.id == session_id)).scalars().first()
+    if db_session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training Session not found")
+
+    # Update fields if they are provided in the request
+    if session_update.training_type_id is not None:
+        db_session.training_type_id = session_update.training_type_id
+    if session_update.coach_id is not None:
+        db_session.coach_id = session_update.coach_id
+    if session_update.start_time is not None:
+        db_session.start_time = session_update.start_time
+    if session_update.duration is not None:
+        db_session.duration = session_update.duration
+    if session_update.max_capacity is not None:
+        db_session.max_capacity = session_update.max_capacity
+
+    db.commit()
+    db.refresh(db_session)
+    return db_session
+
+
+@app.put("/training_types/{type_id}", response_model=TrainingTypeInfo, tags=["training types endpoints"])
+def update_training_type(
+    type_id: int,
+    type_update: TrainingTypeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Updates a training type's information.
+    """
+    db_type = db.execute(select(TrainingType).where(TrainingType.id == type_id)).scalars().first()
+    if db_type is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training Type not found")
+
+    # Update fields if they are provided in the request
+    if type_update.training_name is not None:
+        db_type.training_name = type_update.training_name
+    if type_update.description is not None:
+        db_type.description = type_update.description
+
+    db.commit()
+    db.refresh(db_type)
+    return db_type
+
+
+@app.put("/coaches/{coach_id}", response_model=CoachInfo, tags=["coaches endpoints"])
+def update_coach(
+    coach_id: int,
+    coach_update: CoachUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Updates a coach's information.
     """
@@ -722,6 +735,139 @@ def update_coach(coach_id: int, coach_update: CoachUpdate, db: Session = Depends
     db.commit()
     db.refresh(db_coach)
     return db_coach
+
+
+@app.put("/news/{news_id}", response_model=NewsInfo, tags=["news endpoints"])
+def update_news(
+    news_id: int,
+    news_update: NewsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Updates a news post's information.
+    """
+    db_news = db.execute(select(News).where(News.id == news_id)).scalars().first()
+    if db_news is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="News post not found")
+
+    # Update fields if they are provided in the request
+    if news_update.post_title is not None:
+        db_news.post_title = news_update.post_title
+    if news_update.post_info is not None:
+        db_news.post_info = news_update.post_info
+    if news_update.post_image is not None:
+        db_news.post_image = news_update.post_image
+    if news_update.post_time is not None:
+        db_news.post_time = news_update.post_time
+
+    db.commit()
+    db.refresh(db_news)
+    return db_news
+
+
+# DELETE Endpoints (Protected)
+@app.delete("/resident_to_training/{resident_id}/{training_session_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["resident panel", "training sessions endpoints"])
+def remove_resident_from_training(resident_id: int, training_session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Removes a resident from a training session.
+    """
+    db_resident_to_training = db.execute(
+        select(ResidentToTraining).where(
+            ResidentToTraining.resident_id == resident_id,
+            ResidentToTraining.training_session_id == training_session_id
+        )
+    ).scalars().first()
+
+    if db_resident_to_training is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resident is not enrolled in this training session")
+
+    db.delete(db_resident_to_training)
+    db.commit()
+    return
+
+
+@app.delete("/training_sessions/{training_session_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["training sessions endpoints"])
+def delete_training_session(training_session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Deletes a training session.
+    """
+    training_session = db.execute(
+        select(TrainingSession).where(TrainingSession.id == training_session_id)
+    ).scalars().first()
+
+    if training_session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training session not found")
+
+    db.delete(training_session)
+    db.commit()
+    return
+
+
+@app.delete("/training_types/{type_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["training types endpoints"])
+def remove_training_type(type_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Removes a training type.
+    """
+    training_type = db.execute(
+        select(TrainingType).where(TrainingType.id == type_id)
+    ).scalars().first()
+
+    if training_type is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such training type is not exist")
+
+    db.delete(training_type)
+    db.commit()
+    return
+
+
+@app.delete("/coaches/{coach_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["coaches endpoints"])
+def remove_coach(coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Removes a coach.
+    """
+    coach = db.execute(
+        select(Coach).where(Coach.id == coach_id)
+    ).scalars().first()
+
+    if coach is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
+
+    db.delete(coach)
+    db.commit()
+    return
+
+
+@app.delete("/news/{post_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["news endpoints"])
+def remove_post(post_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Removes a post from news.
+    """
+    db_post = db.execute(
+        select(News).where(News.id == post_id)
+    ).scalars().first()
+
+    if db_post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
+
+    db.delete(db_post)
+    db.commit()
+    return
+
+
+@app.delete("/coaches/{coach_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["coaches endpoints"])
+def remove_coach(coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Removes a coach.
+    """
+    db_coach = db.execute(select(Coach).where(Coach.id == coach_id)).scalars().first()
+
+    if db_coach is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
+
+    db.delete(db_coach)
+    db.commit()
+    return
 
 
 if __name__ == "__main__":
