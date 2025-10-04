@@ -250,6 +250,15 @@ class TrainingSessionInfo(BaseModel):
     max_capacity: int
 
 
+class TrainingSessionShortInfo(BaseModel):
+    id: int
+    training_type_id: int
+    coach_id: int
+    start_time: datetime
+    duration: int
+    max_capacity: int
+
+
 class TrainingSessionInfoWithResidents(BaseModel):
     id: int
     training_type: str
@@ -378,6 +387,26 @@ def get_all_news(db: Session = Depends(get_db), current_user: User = Depends(get
     return news_data
 
 
+@app.get("/news/{new_id}", response_model=NewsInfo, tags=["news endpoints"])
+def get_new_by_id(new_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Retrieves information for current new.
+    """
+    new = db.execute(select(News).where(News.id == new_id)).scalars().first()
+
+    if new is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="New not found")
+
+    return NewsInfo(
+        id=new.id,
+        username=new.user.username,
+        post_title=new.post_title,
+        post_info=new.post_info,
+        post_image=new.post_image,
+        post_time=new.post_time,
+    )
+
+
 @app.get("/coaches/all", response_model=List[CoachInfo], tags=["coaches endpoints"])
 def get_all_coaches(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
@@ -459,7 +488,7 @@ def read_coach(coach_id: int, db: Session = Depends(get_db), current_user: User 
     return coach
 
 
-@app.get("/training_sessions/", response_model=List[TrainingSessionInfo], tags=["training sessions endpoints"])
+@app.get("/training_sessions/all", response_model=List[TrainingSessionInfo], tags=["training sessions endpoints"])
 def read_training_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     training_sessions_data = []
     training_sessions = db.execute(select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
@@ -478,74 +507,6 @@ def read_training_sessions(db: Session = Depends(get_db), current_user: User = D
         )
 
     return training_sessions_data
-
-
-@app.get("/training_sessions/residents/{category_id}/{coach_id}", response_model=List[TrainingSessionInfoWithResidents], tags=["training sessions endpoints"])
-def read_training_sessions_with_residents(category_id: int, coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """
-    Retrieves all training sessions with a list of residents enrolled in each session.
-    """
-    training_sessions_data = []
-    if category_id > 0 and coach_id > 0:
-        training_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.training_type_id == category_id, TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
-    elif category_id > 0:
-        training_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.training_type_id == category_id).order_by(TrainingSession.start_time)).scalars().all()
-    elif coach_id > 0:
-        training_sessions = db.execute(
-            select(TrainingSession).where(TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
-    else:
-        training_sessions = db.execute(
-            select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
-
-    for session in training_sessions:
-        residents = db.execute(
-            select(Resident)
-            .join(ResidentToTraining, Resident.id == ResidentToTraining.resident_id)
-            .where(ResidentToTraining.training_session_id == session.id)
-        ).scalars().all()
-
-        residents_data = [ResidentInfo(
-            id=resident.id,
-            surname=resident.surname,
-            name=resident.name,
-            birthdate=resident.birthdate,
-            email=resident.email,
-            phone=resident.phone
-        ) for resident in residents]
-
-        training_sessions_data.append(
-            TrainingSessionInfoWithResidents(
-                id=session.id,
-                training_type=session.training_type.training_name,
-                coach_surname=session.coach.surname,
-                coach_name=session.coach.name,
-                start_time=session.start_time,
-                duration=session.duration,
-                remaining_places=session.remaining_places,
-                max_capacity=session.max_capacity,
-                residents=residents_data
-            )
-        )
-
-    return training_sessions_data
-
-
-@app.get("/training_types/", response_model=List[TrainingTypeInfo], tags=["resident panel", "training types endpoints"])
-def read_training_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    training_types_data = []
-    training_types = db.execute(select(TrainingType)).scalars().all()
-    for training_type in training_types:
-        training_types_data.append(
-            TrainingTypeInfo(
-                id=training_type.id,
-                training_name=training_type.training_name,
-                description=training_type.description
-            )
-        )
-
-    return training_types_data
 
 
 @app.get("/training_sessions/enrolled", response_model=List[TrainingSessionInfo], tags=["resident panel"])
@@ -623,6 +584,108 @@ def read_not_enrolled_training_sessions_by_filter(category_id: int, coach_id: in
     return fetch_training_session_data(not_enrolled_sessions)
 
 
+
+@app.get("/training_sessions/{training_session_id}", response_model=TrainingSessionInfo, tags=["training sessions endpoints"])
+def read_training_session(training_session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    training_session = db.execute(select(TrainingSession).where(TrainingSession.id == training_session_id)).scalars().first()
+
+    if training_session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training session not found")
+
+    return TrainingSessionInfo(
+        id=training_session.id,
+        training_type=training_session.training_type.training_name,
+        coach_surname=training_session.coach.surname,
+        coach_name=training_session.coach.name,
+        start_time=training_session.start_time,
+        duration=training_session.duration,
+        remaining_places=training_session.remaining_places,
+        max_capacity=training_session.max_capacity
+    )
+
+
+@app.get("/training_sessions/residents/{category_id}/{coach_id}", response_model=List[TrainingSessionInfoWithResidents], tags=["training sessions endpoints"])
+def read_training_sessions_with_residents(category_id: int, coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Retrieves all training sessions with a list of residents enrolled in each session.
+    """
+    training_sessions_data = []
+    if category_id > 0 and coach_id > 0:
+        training_sessions = db.execute(
+            select(TrainingSession).where(TrainingSession.training_type_id == category_id, TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
+    elif category_id > 0:
+        training_sessions = db.execute(
+            select(TrainingSession).where(TrainingSession.training_type_id == category_id).order_by(TrainingSession.start_time)).scalars().all()
+    elif coach_id > 0:
+        training_sessions = db.execute(
+            select(TrainingSession).where(TrainingSession.coach_id == coach_id).order_by(TrainingSession.start_time)).scalars().all()
+    else:
+        training_sessions = db.execute(
+            select(TrainingSession).order_by(TrainingSession.start_time)).scalars().all()
+
+    for session in training_sessions:
+        residents = db.execute(
+            select(Resident)
+            .join(ResidentToTraining, Resident.id == ResidentToTraining.resident_id)
+            .where(ResidentToTraining.training_session_id == session.id)
+        ).scalars().all()
+
+        residents_data = [ResidentInfo(
+            id=resident.id,
+            surname=resident.surname,
+            name=resident.name,
+            birthdate=resident.birthdate,
+            email=resident.email,
+            phone=resident.phone
+        ) for resident in residents]
+
+        training_sessions_data.append(
+            TrainingSessionInfoWithResidents(
+                id=session.id,
+                training_type=session.training_type.training_name,
+                coach_surname=session.coach.surname,
+                coach_name=session.coach.name,
+                start_time=session.start_time,
+                duration=session.duration,
+                remaining_places=session.remaining_places,
+                max_capacity=session.max_capacity,
+                residents=residents_data
+            )
+        )
+
+    return training_sessions_data
+
+
+@app.get("/training_types/all", response_model=List[TrainingTypeInfo], tags=["resident panel", "training types endpoints"])
+def read_training_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    training_types_data = []
+    training_types = db.execute(select(TrainingType)).scalars().all()
+    for training_type in training_types:
+        training_types_data.append(
+            TrainingTypeInfo(
+                id=training_type.id,
+                training_name=training_type.training_name,
+                description=training_type.description
+            )
+        )
+
+    return training_types_data
+
+
+@app.get("/training_types/{type_id}", response_model=TrainingTypeInfo, tags=["training types endpoints"])
+def read_training_type(type_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    training_type = db.execute(select(TrainingType).where(TrainingType.id == type_id)).scalars().first()
+
+    if training_type is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training type not found")
+
+    return TrainingTypeInfo(
+        id=training_type.id,
+        training_name=training_type.training_name,
+        description=training_type.description
+    )
+
+
 # PUT Endpoints (Protected)
 @app.put("/residents/{resident_id}", response_model=ResidentInfo, tags=["resident panel"])
 def update_resident(resident_id: int, resident_update: ResidentUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
@@ -650,7 +713,7 @@ def update_resident(resident_id: int, resident_update: ResidentUpdate, db: Sessi
     return db_resident
 
 
-@app.put("/training_sessions/{session_id}", response_model=TrainingSessionInfo, tags=["training sessions endpoints"])
+@app.put("/training_sessions/{session_id}", response_model=TrainingSessionShortInfo, tags=["training sessions endpoints"])
 def update_training_session(
     session_id: int,
     session_update: TrainingSessionUpdate,
@@ -763,7 +826,15 @@ def update_news(
 
     db.commit()
     db.refresh(db_news)
-    return db_news
+
+    return NewsInfo(
+        id=db_news.id,
+        username=db_news.user.username,
+        post_title=db_news.post_title,
+        post_info=db_news.post_info,
+        post_image=db_news.post_image,
+        post_time=db_news.post_time,
+    )
 
 
 # DELETE Endpoints (Protected)
