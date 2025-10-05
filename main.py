@@ -372,7 +372,7 @@ def get_all_news(db: Session = Depends(get_db), current_user: User = Depends(get
     """
     Retrieves information for all news.
     """
-    news = db.execute(select(News)).scalars().all()
+    news = db.execute(select(News).order_by(News.post_time)).scalars().all()
     news_data = []
     for new in news:
         news_data.append(NewsInfo(
@@ -412,7 +412,7 @@ def get_all_coaches(db: Session = Depends(get_db), current_user: User = Depends(
     """
     Retrieves information for all coaches.
     """
-    coaches = db.execute(select(Coach)).scalars().all()
+    coaches = db.execute(select(Coach).order_by(Coach.surname)).scalars().all()
     return coaches
 
 
@@ -584,7 +584,6 @@ def read_not_enrolled_training_sessions_by_filter(category_id: int, coach_id: in
     return fetch_training_session_data(not_enrolled_sessions)
 
 
-
 @app.get("/training_sessions/{training_session_id}", response_model=TrainingSessionInfo, tags=["training sessions endpoints"])
 def read_training_session(training_session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     training_session = db.execute(select(TrainingSession).where(TrainingSession.id == training_session_id)).scalars().first()
@@ -659,7 +658,7 @@ def read_training_sessions_with_residents(category_id: int, coach_id: int, db: S
 @app.get("/training_types/all", response_model=List[TrainingTypeInfo], tags=["resident panel", "training types endpoints"])
 def read_training_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     training_types_data = []
-    training_types = db.execute(select(TrainingType)).scalars().all()
+    training_types = db.execute(select(TrainingType).order_by(TrainingType.training_name)).scalars().all()
     for training_type in training_types:
         training_types_data.append(
             TrainingTypeInfo(
