@@ -1,14 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, select, ForeignKey, func
-from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship, backref
-from datetime import datetime, timedelta
-from typing import Annotated, List, Dict
+
+from models import *
+from pydantic_models import *
+
 import bcrypt
 import jwt
-from pydantic import BaseModel, Field, validator, field_validator
-from models import *
 
 # Database Configuration (Replace with your actual database URL)
 DATABASE_URL = "postgresql://postgres:postpass@localhost:5432/donfitness"
@@ -80,195 +78,7 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 
 # Pydantic Models
-class UserCreate(BaseModel):
-    username: str = Field(..., min_length=4, max_length=30)  # Example validation
-    password: str = Field(..., min_length=8)  # Example validation
-    surname: str
-    name: str
-    birthdate: datetime  # Use datetime (Python's datetime)
-    email: str
-    phone: str
-
-    @field_validator('birthdate')  # Use field_validator and specify the field name
-    def parse_dates(cls, value: datetime):
-        if isinstance(value, datetime):  # Check if it's already a datetime object
-            return value
-        try:
-            return datetime.fromisoformat(value.rstrip('Z'))  # Attempt ISO format parsing
-        except ValueError:
-            raise ValueError('Invalid datetime format.  Should be ISO 8601 format.')
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    is_active: bool
-
-
-class NewsCreate(BaseModel):
-    user_id: int
-    post_title: str
-    post_info: str
-    post_image: str
-
-
-class NewsUpdate(BaseModel):
-    post_title: str | None = None
-    post_info: str | None = None
-    post_image: str | None = None
-
-
-class ResidentCreate(BaseModel):
-    user_id: int
-    surname: str
-    name: str
-    birthdate: datetime
-    email: str
-    phone: str
-
-
-class ResidentUpdate(BaseModel):
-    surname: str | None = None
-    name: str | None = None
-    birthdate: datetime | None = None
-    email: str | None = None
-    phone: str | None = None
-
-    @field_validator('birthdate')
-    def parse_dates(cls, value: datetime | None):
-        if value is None:
-            return None  # Allow null values
-        if isinstance(value, datetime):
-            return value
-        try:
-            return datetime.fromisoformat(value.rstrip('Z'))
-        except ValueError:
-            raise ValueError('Invalid datetime format.  Should be ISO 8601 format.')
-
-
-class CoachCreate(BaseModel):
-    surname: str
-    name: str
-    speciality: str
-    qualification: str
-    extra_info: str
-
-
-class CoachUpdate(BaseModel):
-    surname: str | None = None
-    name: str | None = None
-    speciality: str | None = None
-    qualification: str | None = None
-    extra_info: str | None = None
-
-
-class TrainingTypeCreate(BaseModel):
-    training_name: str
-    description: str
-
-
-class TrainingTypeUpdate(BaseModel):
-    training_name: str | None = None
-    description: str | None = None
-
-
-class TrainingSessionCreate(BaseModel):
-    training_type_id: int
-    coach_id: int
-    start_time: datetime
-    duration: int
-    max_capacity: int
-
-
-class TrainingSessionUpdate(BaseModel):
-    training_type_id: int | None = None
-    coach_id: int | None = None
-    start_time: datetime | None = None
-    duration: int | None = None
-    max_capacity: int | None = None
-
-
-# Pydantic model for ResidentToTraining
-class ResidentToTrainingCreate(BaseModel):
-    resident_id: int
-    training_session_id: int
-
-
-class NewsInfo(BaseModel):
-    id: int
-    username: str
-    post_title: str
-    post_info: str
-    post_image: str
-    post_time: datetime
-
-
-class NewsUpdate(BaseModel):
-    post_title: str | None = None
-    post_info: str | None = None
-    post_image: str | None = None
-    post_time: datetime | None = None
-
-
-class ResidentInfo(BaseModel):
-    id: int
-    surname: str
-    name: str
-    birthdate: datetime
-    email: str
-    phone: str
-
-
-class CoachInfo(BaseModel):
-    id: int
-    surname: str
-    name: str
-    speciality: str
-    qualification: str
-    extra_info: str
-
-
-class TrainingTypeInfo(BaseModel):
-    id: int
-    training_name: str
-    description: str
-
-
-class TrainingSessionInfo(BaseModel):
-    id: int
-    training_type: str
-    coach_surname: str
-    coach_name: str
-    start_time: datetime
-    duration: int
-    remaining_places: int
-    max_capacity: int
-
-
-class TrainingSessionShortInfo(BaseModel):
-    id: int
-    training_type_id: int
-    coach_id: int
-    start_time: datetime
-    duration: int
-    max_capacity: int
-
-
-class TrainingSessionInfoWithResidents(BaseModel):
-    id: int
-    training_type: str
-    coach_surname: str
-    coach_name: str
-    start_time: datetime
-    duration: int
-    remaining_places: int
-    max_capacity: int
-    residents: List[ResidentInfo]
+# moved to "pydantic_models"
 
 
 # Hashing Function
@@ -412,7 +222,7 @@ def get_all_coaches(db: Session = Depends(get_db), current_user: User = Depends(
     """
     Retrieves information for all coaches.
     """
-    coaches = db.execute(select(Coach).order_by(Coach.surname)).scalars().all()
+    coaches = db.execute(select(Coach).order_by(Coach.surname, Coach.name)).scalars().all()
     return coaches
 
 
@@ -472,6 +282,15 @@ def add_resident_to_training(resident_to_training: ResidentToTrainingCreate, db:
 
 
 # GET Endpoints for Information (Protected)
+@app.get("/residents/all", response_model=List[ResidentInfo], tags=["resident panel"])
+def read_resident(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+        Retrieves information for all residents.
+    """
+    residents = db.execute(select(Resident).order_by(Resident.surname, Resident.name)).scalars().all()
+    return residents
+
+
 @app.get("/residents/{resident_id}", response_model=ResidentInfo, tags=["resident panel"])
 def read_resident(resident_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     resident = db.execute(select(Resident).where(Resident.id == resident_id)).scalars().first()
@@ -603,8 +422,8 @@ def read_training_session(training_session_id: int, db: Session = Depends(get_db
     )
 
 
-@app.get("/training_sessions/residents/{category_id}/{coach_id}", response_model=List[TrainingSessionInfoWithResidents], tags=["training sessions endpoints"])
-def read_training_sessions_with_residents(category_id: int, coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+@app.get("/training_sessions/residents/{category_id}/{coach_id}/{resident_id}", response_model=List[TrainingSessionInfoWithResidents], tags=["training sessions endpoints"])
+def read_training_sessions_with_residents(category_id: int, coach_id: int, resident_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Retrieves all training sessions with a list of residents enrolled in each session.
     """
@@ -629,28 +448,54 @@ def read_training_sessions_with_residents(category_id: int, coach_id: int, db: S
             .where(ResidentToTraining.training_session_id == session.id)
         ).scalars().all()
 
-        residents_data = [ResidentInfo(
-            id=resident.id,
-            surname=resident.surname,
-            name=resident.name,
-            birthdate=resident.birthdate,
-            email=resident.email,
-            phone=resident.phone
-        ) for resident in residents]
+        if resident_id == 0:
+            residents_data = [ResidentInfo(
+                id=resident.id,
+                surname=resident.surname,
+                name=resident.name,
+                birthdate=resident.birthdate,
+                email=resident.email,
+                phone=resident.phone
+            ) for resident in residents]
 
-        training_sessions_data.append(
-            TrainingSessionInfoWithResidents(
-                id=session.id,
-                training_type=session.training_type.training_name,
-                coach_surname=session.coach.surname,
-                coach_name=session.coach.name,
-                start_time=session.start_time,
-                duration=session.duration,
-                remaining_places=session.remaining_places,
-                max_capacity=session.max_capacity,
-                residents=residents_data
+            training_sessions_data.append(
+                TrainingSessionInfoWithResidents(
+                    id=session.id,
+                    training_type=session.training_type.training_name,
+                    coach_surname=session.coach.surname,
+                    coach_name=session.coach.name,
+                    start_time=session.start_time,
+                    duration=session.duration,
+                    remaining_places=session.remaining_places,
+                    max_capacity=session.max_capacity,
+                    residents=residents_data
+                )
             )
-        )
+
+        else:
+            residents_data = [ResidentInfo(
+                id=resident.id,
+                surname=resident.surname,
+                name=resident.name,
+                birthdate=resident.birthdate,
+                email=resident.email,
+                phone=resident.phone
+            ) for resident in residents if resident.id == resident_id]
+
+            if residents_data:
+                training_sessions_data.append(
+                    TrainingSessionInfoWithResidents(
+                        id=session.id,
+                        training_type=session.training_type.training_name,
+                        coach_surname=session.coach.surname,
+                        coach_name=session.coach.name,
+                        start_time=session.start_time,
+                        duration=session.duration,
+                        remaining_places=session.remaining_places,
+                        max_capacity=session.max_capacity,
+                        residents=residents_data
+                    )
+                )
 
     return training_sessions_data
 
@@ -921,21 +766,6 @@ def remove_post(post_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
 
     db.delete(db_post)
-    db.commit()
-    return
-
-
-@app.delete("/coaches/{coach_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["coaches endpoints"])
-def remove_coach(coach_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """
-    Removes a coach.
-    """
-    db_coach = db.execute(select(Coach).where(Coach.id == coach_id)).scalars().first()
-
-    if db_coach is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such coach is not exist")
-
-    db.delete(db_coach)
     db.commit()
     return
 
