@@ -161,6 +161,11 @@ class TrainingTypeInfo(BaseModel):
     description: str
 
 
+class TrainingTypeStatistics(BaseModel):
+    training_name: str
+    recorded_residents: int
+
+
 class TrainingSessionInfo(BaseModel):
     id: int
     training_type: str

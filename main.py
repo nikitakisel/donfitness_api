@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy import func
+from sqlalchemy.orm import aliased
 
 from models import *
 from pydantic_models import *
@@ -514,6 +516,19 @@ def read_training_types(db: Session = Depends(get_db), current_user: User = Depe
         )
 
     return training_types_data
+
+
+@app.get("/training_types/statistics", response_model=List[TrainingTypeStatistics], tags=["resident panel", "training types endpoints"])
+def read_training_types_statistics(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_training_types_statistics = db.execute(select(
+            TrainingType.training_name.label("training_name"),
+            func.count().label("recorded_residents")
+        )
+        .join(TrainingSession, TrainingSession.training_type_id == TrainingType.id)
+        .join(ResidentToTraining, ResidentToTraining.training_session_id == TrainingSession.id)
+        .group_by(TrainingType.training_name)).all()
+
+    return db_training_types_statistics
 
 
 @app.get("/training_types/{type_id}", response_model=TrainingTypeInfo, tags=["training types endpoints"])
