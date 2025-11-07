@@ -256,13 +256,22 @@ def create_coach(coach: CoachCreate, db: Session = Depends(get_db), current_user
     return db_coach
 
 
-@app.post("/training_types/", response_model=None, status_code=status.HTTP_201_CREATED, tags=["training types endpoints"])
+@app.post("/training_types/", response_model=TrainingTypeInfo, status_code=status.HTTP_201_CREATED, tags=["training types endpoints"])
 def create_training_type(training_type: TrainingTypeCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_training_type = TrainingType(**training_type.dict())
     db.add(db_training_type)
     db.commit()
     db.refresh(db_training_type)
     return db_training_type
+
+
+@app.post("/achievements/", response_model=AchievementInfo, status_code=status.HTTP_201_CREATED, tags=["achievements endpoints"])
+def create_achievement(achievement: AchievementCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_achievement = Achievement(**achievement.dict())
+    db.add(db_achievement)
+    db.commit()
+    db.refresh(db_achievement)
+    return db_achievement
 
 
 @app.post("/training_sessions/", response_model=None, status_code=status.HTTP_201_CREATED, tags=["training sessions endpoints"])
@@ -504,18 +513,14 @@ def read_training_sessions_with_residents(category_id: int, coach_id: int, resid
 
 @app.get("/training_types/all", response_model=List[TrainingTypeInfo], tags=["resident panel", "training types endpoints"])
 def read_training_types(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    training_types_data = []
     training_types = db.execute(select(TrainingType).order_by(TrainingType.training_name)).scalars().all()
-    for training_type in training_types:
-        training_types_data.append(
-            TrainingTypeInfo(
-                id=training_type.id,
-                training_name=training_type.training_name,
-                description=training_type.description
-            )
-        )
+    return training_types
 
-    return training_types_data
+
+@app.get("/achievements/all", response_model=List[AchievementInfo], tags=["resident panel", "achievements endpoints"])
+def read_achievements(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    achievements = db.execute(select(Achievement).order_by(Achievement.achievement_name)).scalars().all()
+    return achievements
 
 
 @app.get("/training_types/statistics", response_model=List[TrainingTypeStatistics], tags=["resident panel", "training types endpoints"])
@@ -538,11 +543,56 @@ def read_training_type(type_id: int, db: Session = Depends(get_db), current_user
     if training_type is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training type not found")
 
-    return TrainingTypeInfo(
-        id=training_type.id,
-        training_name=training_type.training_name,
-        description=training_type.description
+    return training_type
+
+
+@app.get("/achievements/received", response_model=List[AchievementInfo], tags=["achievements endpoints"])
+def read_received_achievements(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Returns a list of achievements the current user is received.
+    """
+    resident = db.execute(select(Resident).where(Resident.user_id == current_user.id)).scalars().first()
+    if not resident:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resident not found for this user")
+
+    received_achievements = sorted([
+        ResidentToAchievement.achievement
+        for ResidentToAchievement in resident.achievements
+    ],
+        key=lambda item: item.achievement_name
     )
+
+    return received_achievements
+
+
+@app.get("/achievements/not_received", response_model=List[AchievementInfo], tags=["achievements endpoints"])
+def read_not_received_achievements(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Returns a list of achievements the current user is NOT received.
+    """
+    resident = db.execute(select(Resident).where(Resident.user_id == current_user.id)).scalars().first()
+    if not resident:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resident not found for this user")
+
+    received_achievements_ids = {
+        achievement.achievement_id for achievement in resident.achievements
+    }
+
+    all_achievements = db.execute(select(Achievement).order_by(Achievement.achievement_name)).scalars().all()
+    not_received_achievements = [
+        achievement for achievement in all_achievements if achievement.id not in received_achievements_ids
+    ]
+    return not_received_achievements
+
+
+@app.get("/achievements/{achievement_id}", response_model=AchievementInfo, tags=["achievements endpoints"])
+def read_achievement(achievement_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    achievement = db.execute(select(Achievement).where(Achievement.id == achievement_id)).scalars().first()
+
+    if achievement is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Achievement not found")
+
+    return achievement
 
 
 # PUT Endpoints (Protected)
@@ -626,6 +676,33 @@ def update_training_type(
     db.commit()
     db.refresh(db_type)
     return db_type
+
+
+@app.put("/achievements/{achievement_id}", response_model=AchievementInfo, tags=["achievements endpoints"])
+def update_achievement(
+    achievement_id: int,
+    achievement_update: AchievementUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Updates an achievement's information.
+    """
+    db_achievement = db.execute(select(Achievement).where(Achievement.id == achievement_id)).scalars().first()
+    if db_achievement is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Achievement not found")
+
+    # Update fields if they are provided in the request
+    if achievement_update.achievement_name is not None:
+        db_achievement.achievement_name = achievement_update.achievement_name
+    if achievement_update.description is not None:
+        db_achievement.description = achievement_update.description
+    if achievement_update.criteria is not None:
+        db_achievement.criteria = achievement_update.criteria
+
+    db.commit()
+    db.refresh(db_achievement)
+    return db_achievement
 
 
 @app.put("/coaches/{coach_id}", response_model=CoachInfo, tags=["coaches endpoints"])
@@ -747,6 +824,23 @@ def remove_training_type(type_id: int, db: Session = Depends(get_db), current_us
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such training type is not exist")
 
     db.delete(training_type)
+    db.commit()
+    return
+
+
+@app.delete("/achievements/{achievement_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["achievements endpoints"])
+def remove_achievement(achievement_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Removes an achievement.
+    """
+    achievement = db.execute(
+        select(Achievement).where(Achievement.id == achievement_id)
+    ).scalars().first()
+
+    if achievement is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Such achievement is not exist")
+
+    db.delete(achievement)
     db.commit()
     return
 

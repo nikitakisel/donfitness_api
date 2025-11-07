@@ -44,6 +44,7 @@ class Resident(Base):
 
     user = relationship("User", back_populates="resident")
     trainings = relationship("ResidentToTraining", back_populates="resident", cascade="all, delete-orphan")
+    achievements = relationship("ResidentToAchievement", back_populates="resident", cascade="all, delete-orphan")
 
 
 class Coach(Base):
@@ -96,3 +97,25 @@ class ResidentToTraining(Base):
 
     resident = relationship("Resident", back_populates="trainings")
     training_session = relationship("TrainingSession", back_populates="residents")
+
+
+class Achievement(Base):
+    __tablename__ = "achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    achievement_name = Column(String)
+    description = Column(Text)
+    criteria = Column(Text)
+
+    residents = relationship("ResidentToAchievement", back_populates="achievement", cascade="all, delete-orphan")
+
+
+class ResidentToAchievement(Base):
+    __tablename__ = "residents_to_achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    resident_id = Column(Integer, ForeignKey("residents.id", ondelete="CASCADE"), index=True)
+    achievement_id = Column(Integer, ForeignKey("achievements.id", ondelete="CASCADE"), index=True)
+
+    resident = relationship("Resident", back_populates="achievements")
+    achievement = relationship("Achievement", back_populates="residents")

@@ -95,9 +95,21 @@ class TrainingTypeCreate(BaseModel):
     description: str
 
 
+class AchievementCreate(BaseModel):
+    achievement_name: str
+    description: str
+    criteria: str
+
+
 class TrainingTypeUpdate(BaseModel):
     training_name: str | None = None
     description: str | None = None
+
+
+class AchievementUpdate(BaseModel):
+    achievement_name: str | None = None
+    description: str | None = None
+    criteria: str | None = None
 
 
 class TrainingSessionCreate(BaseModel):
@@ -119,6 +131,11 @@ class TrainingSessionUpdate(BaseModel):
 class ResidentToTrainingCreate(BaseModel):
     resident_id: int
     training_session_id: int
+
+
+class ResidentToAchievementCreate(BaseModel):
+    resident_id: int
+    achievement_id: int
 
 
 class NewsInfo(BaseModel):
@@ -159,6 +176,13 @@ class TrainingTypeInfo(BaseModel):
     id: int
     training_name: str
     description: str
+
+
+class AchievementInfo(BaseModel):
+    id: int
+    achievement_name: str
+    description: str
+    criteria: str
 
 
 class TrainingTypeStatistics(BaseModel):
