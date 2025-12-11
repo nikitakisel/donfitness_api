@@ -1,0 +1,37 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postpass@localhost:5432/donfitness
+      SECRET_KEY: "L724SF7qpmGRDRVifUDXIn5wogaA4VxQHZYNgnbo9begeW5373"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "120"
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8000"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    # volumes: # Для режима разработки с горячей перезагрузкой
+    #   - .:/app # Монтирует текущую директорию хоста в /app контейнера
+    command: /bin/bash -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: "donfitness"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postpass"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:

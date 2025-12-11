@@ -1,9 +1,8 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, select, ForeignKey
-from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship, backref
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, Date, ForeignKey
+from sqlalchemy.orm import sessionmaker, Session, relationship
 from datetime import datetime
 
-# SQLAlchemy Setup
-Base = declarative_base()
+from app.database import Base
 
 
 class User(Base):
