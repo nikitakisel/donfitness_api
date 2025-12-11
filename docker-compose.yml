@@ -6,8 +6,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:postpass@localhost:5432/donfitness
-      SECRET_KEY: "L724SF7qpmGRDRVifUDXIn5wogaA4VxQHZYNgnbo9begeW5373"
+      DATABASE_URL: postgresql://postgres:postpass@db:5432/donfitness
+      SECRET_KEY: "35eLUEzGIrtRb0VBofQad0zX7QSV9pD5WHXBUy9ioh1qegIsH2sF9NiR9qCwGj3VOlLiOKDRuDhuLhzGfEHJRwFoM0pRdP7OygnM"
       ALGORITHM: "HS256"
       ACCESS_TOKEN_EXPIRE_MINUTES: "120"
       CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8000"]'
